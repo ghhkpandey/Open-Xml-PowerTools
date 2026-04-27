@@ -189,9 +189,9 @@ namespace OpenXmlPowerTools
 
         private static XElement RetrieveContentTypeList(OpenXmlPackage oxPkg)
         {
-            Package pkg = oxPkg.Package;
+            //Package pkg = oxPkg.Package;
 
-            var nonRelationshipParts = pkg.GetParts().Cast<ZipPackagePart>().Where(p => p.ContentType != "application/vnd.openxmlformats-package.relationships+xml");
+            var nonRelationshipParts = oxPkg.GetAllParts().Cast<OpenXmlPart>().Where(p => p.ContentType != "application/vnd.openxmlformats-package.relationships+xml");
             var contentTypes = nonRelationshipParts
                 .Select(p => p.ContentType)
                 .OrderBy(t => t)
@@ -203,9 +203,9 @@ namespace OpenXmlPowerTools
 
         private static XElement RetrieveNamespaceList(OpenXmlPackage oxPkg)
         {
-            Package pkg = oxPkg.Package;
+            //Package pkg = oxPkg.Package;
 
-            var nonRelationshipParts = pkg.GetParts().Cast<ZipPackagePart>().Where(p => p.ContentType != "application/vnd.openxmlformats-package.relationships+xml");
+            var nonRelationshipParts = oxPkg.GetAllParts().Cast<OpenXmlPart>().Where(p => p.ContentType != "application/vnd.openxmlformats-package.relationships+xml");
             var xmlParts = nonRelationshipParts
                 .Where(p => p.ContentType.ToLower().EndsWith("xml"));
 

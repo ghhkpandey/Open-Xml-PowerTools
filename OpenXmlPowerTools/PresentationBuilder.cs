@@ -76,7 +76,7 @@ namespace OpenXmlPowerTools
                 using (PresentationDocument output = streamDoc.GetPresentationDocument())
                 {
                     BuildPresentation(sources, output);
-                    output.Close();
+                    output.Save();
                 }
                 streamDoc.GetModifiedDocument().SaveAs(fileName);
             }
@@ -89,7 +89,7 @@ namespace OpenXmlPowerTools
                 using (PresentationDocument output = streamDoc.GetPresentationDocument())
                 {
                     BuildPresentation(sources, output);
-                    output.Close();
+                    output.Save();
                 }
                 return streamDoc.GetModifiedPmlDocument();
             }
@@ -374,7 +374,7 @@ namespace OpenXmlPowerTools
         {
             XElement newRegular;
             FontPart oldFontPart = (FontPart)sourceDocument.PresentationPart.GetPartById((string)font.Element(fontXName).Attributes(R.id).FirstOrDefault());
-            FontPartType fpt;
+            PartTypeInfo fpt;
             if (oldFontPart.ContentType == "application/x-fontdata")
                 fpt = FontPartType.FontData;
             else if (oldFontPart.ContentType == "application/x-font-ttf")

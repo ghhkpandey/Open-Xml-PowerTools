@@ -172,7 +172,7 @@ namespace OpenXmlPowerTools
                 using (WordprocessingDocument output = streamDoc.GetWordprocessingDocument())
                 {
                     BuildDocument(sources, output, new DocumentBuilderSettings());
-                    output.Close();
+                    output.Save();
                 }
                 streamDoc.GetModifiedDocument().SaveAs(fileName);
             }
@@ -185,7 +185,7 @@ namespace OpenXmlPowerTools
                 using (WordprocessingDocument output = streamDoc.GetWordprocessingDocument())
                 {
                     BuildDocument(sources, output, settings);
-                    output.Close();
+                    output.Save();
                 }
                 streamDoc.GetModifiedDocument().SaveAs(fileName);
             }
@@ -198,7 +198,7 @@ namespace OpenXmlPowerTools
                 using (WordprocessingDocument output = streamDoc.GetWordprocessingDocument())
                 {
                     BuildDocument(sources, output, new DocumentBuilderSettings());
-                    output.Close();
+                    output.Save();
                 }
                 return streamDoc.GetModifiedWmlDocument();
             }
@@ -211,7 +211,7 @@ namespace OpenXmlPowerTools
                 using (WordprocessingDocument output = streamDoc.GetWordprocessingDocument())
                 {
                     BuildDocument(sources, output, settings);
-                    output.Close();
+                    output.Save();
                 }
                 return streamDoc.GetModifiedWmlDocument();
             }
