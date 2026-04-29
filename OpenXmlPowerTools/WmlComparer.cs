@@ -13,7 +13,9 @@ using System.IO;
 using System.IO.Packaging;
 using System.Text;
 using System.Xml.Linq;
+using DocumentFormat.OpenXml.Features;
 using DocumentFormat.OpenXml.Packaging;
+#pragma warning disable OOXML0001
 using System.Drawing;
 using System.Security.Cryptography;
 using OpenXmlPowerTools;
@@ -341,7 +343,7 @@ namespace OpenXmlPowerTools
             {
                 ms.Write(source.DocumentByteArray, 0, source.DocumentByteArray.Length);
                 OpenSettings os = new OpenSettings();
-                os.MarkupCompatibilityProcessSettings = new MarkupCompatibilityProcessSettings(MarkupCompatibilityProcessMode.ProcessAllParts,
+                os.MarkupCompatibilityProcessSettings = new MarkupCompatibilityProcessSettings(MarkupCompatibilityProcessMode.ProcessLoadedPartsOnly,
                     DocumentFormat.OpenXml.FileFormatVersions.Office2007);
                 using (WordprocessingDocument wDoc = WordprocessingDocument.Open(ms, true, os))
                 {
@@ -1338,11 +1340,9 @@ namespace OpenXmlPowerTools
             ConsolidationInfo consolidationInfo,
             WmlComparerSettings settings)
         {
-            Package packageOfDeletedContent = wDocDelta.MainDocumentPart.OpenXmlPackage.Package;
-            Package packageOfNewContent = consolidatedWDoc.MainDocumentPart.OpenXmlPackage.Package;
-            PackagePart partInDeletedDocument = packageOfDeletedContent.GetPart(wDocDelta.MainDocumentPart.Uri);
-            PackagePart partInNewDocument = packageOfNewContent.GetPart(consolidatedWDoc.MainDocumentPart.Uri);
-            consolidationInfo.RevisionElement = MoveRelatedPartsToDestination(partInDeletedDocument, partInNewDocument, consolidationInfo.RevisionElement);
+            var packagePartOfDeletedContent = GetRawPackagePart(GetPackagePartFromOpenXmlPart(wDocDelta.MainDocumentPart));
+            var packagePartOfNewContent = GetRawPackagePart(GetPackagePartFromOpenXmlPart(consolidatedWDoc.MainDocumentPart));
+            consolidationInfo.RevisionElement = MoveRelatedPartsToDestination(packagePartOfDeletedContent, packagePartOfNewContent, consolidationInfo.RevisionElement);
 
             var clonedForHashing = (XElement)CloneBlockLevelContentForHashing(consolidatedWDoc.MainDocumentPart, consolidationInfo.RevisionElement, false, settings);
             clonedForHashing.Descendants().Where(d => d.Name == W.ins || d.Name == W.del).Attributes(W.id).Remove();
@@ -4605,11 +4605,9 @@ namespace OpenXmlPowerTools
                                         var openXmlPartInNewDocument = part;
                                         return gc.Select(gce =>
                                         {
-                                            Package packageOfDeletedContent = openXmlPartOfDeletedContent.OpenXmlPackage.Package;
-                                            Package packageOfNewContent = openXmlPartInNewDocument.OpenXmlPackage.Package;
-                                            PackagePart partInDeletedDocument = packageOfDeletedContent.GetPart(part.Uri);
-                                            PackagePart partInNewDocument = packageOfNewContent.GetPart(part.Uri);
-                                            return MoveRelatedPartsToDestination(partInDeletedDocument, partInNewDocument, newDrawing);
+                                            var pkgPartDeleted = GetRawPackagePart(GetPackagePartFromOpenXmlPart(openXmlPartOfDeletedContent));
+                                            var pkgPartNew = GetRawPackagePart(GetPackagePartFromOpenXmlPart(openXmlPartInNewDocument));
+                                            return MoveRelatedPartsToDestination(pkgPartDeleted, pkgPartNew, newDrawing);
                                         });
                                     });
                                 }
@@ -4624,11 +4622,9 @@ namespace OpenXmlPowerTools
                                         var openXmlPartInNewDocument = part;
                                         return gc.Select(gce =>
                                         {
-                                            Package packageOfSourceContent = openXmlPartOfInsertedContent.OpenXmlPackage.Package;
-                                            Package packageOfNewContent = openXmlPartInNewDocument.OpenXmlPackage.Package;
-                                            PackagePart partInDeletedDocument = packageOfSourceContent.GetPart(part.Uri);
-                                            PackagePart partInNewDocument = packageOfNewContent.GetPart(part.Uri);
-                                            return MoveRelatedPartsToDestination(partInDeletedDocument, partInNewDocument, newDrawing);
+                                            var pkgPartSource = GetRawPackagePart(GetPackagePartFromOpenXmlPart(openXmlPartOfInsertedContent));
+                                            var pkgPartNew = GetRawPackagePart(GetPackagePartFromOpenXmlPart(openXmlPartInNewDocument));
+                                            return MoveRelatedPartsToDestination(pkgPartSource, pkgPartNew, newDrawing);
                                         });
                                     });
                                 }
@@ -4740,6 +4736,41 @@ namespace OpenXmlPowerTools
             return elementList;
         }
 
+        private static System.Reflection.PropertyInfo s_packagePartProperty = null;
+        private static System.Reflection.FieldInfo s_innerPartField = null;
+
+        private static IPackagePart GetPackagePartFromOpenXmlPart(OpenXmlPart part)
+        {
+            if (s_packagePartProperty == null)
+            {
+                s_packagePartProperty = typeof(OpenXmlPart).GetProperty("PackagePart",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            }
+            return (IPackagePart)s_packagePartProperty.GetValue(part);
+        }
+
+        private static PackagePart GetRawPackagePart(IPackagePart ipart)
+        {
+            if (s_innerPartField == null)
+            {
+                var t = ipart.GetType();
+                // The SDK wraps PackagePart in PackageFeatureBase+PackagePart with backing field "<Part>k__BackingField"
+                s_innerPartField = t.GetField("<Part>k__BackingField",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                // Fallback: DelegatingPackagePart may store it differently
+                if (s_innerPartField == null)
+                    s_innerPartField = t.GetField("_part",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            }
+            if (s_innerPartField != null)
+            {
+                var raw = s_innerPartField.GetValue(ipart) as PackagePart;
+                if (raw != null) return raw;
+            }
+            // Last resort: cast directly (may work if the IPackagePart impl is a PackagePart subclass)
+            return (PackagePart)ipart;
+        }
+
         private static XElement MoveRelatedPartsToDestination(PackagePart partOfDeletedContent, PackagePart partInNewDocument,
             XElement contentElement)
         {
@@ -4758,9 +4789,9 @@ namespace OpenXmlPowerTools
                 {
                     var rId = (string)att;
 
-                    var relationshipForDeletedPart = partOfDeletedContent.GetRelationship(rId);
-                    if (relationshipForDeletedPart == null)
+                    if (!partOfDeletedContent.RelationshipExists(rId))
                         throw new FileFormatException("Invalid document");
+                    var relationshipForDeletedPart = partOfDeletedContent.GetRelationship(rId);
 
                     var tartString = relationshipForDeletedPart.TargetUri.ToString();
 
@@ -4800,9 +4831,9 @@ namespace OpenXmlPowerTools
                         else
                             uri = new Uri(uriString, UriKind.Relative);
 
-                        var newPart = partInNewDocument.Package.CreatePart(uri, relatedPackagePart.ContentType);
-                        using (var oldPartStream = relatedPackagePart.GetStream())
-                        using (var newPartStream = newPart.GetStream())
+                        var newPart = partInNewDocument.Package.CreatePart(uri, relatedPackagePart.ContentType, System.IO.Packaging.CompressionOption.Normal);
+                        using (var oldPartStream = relatedPackagePart.GetStream(FileMode.Open, FileAccess.Read))
+                        using (var newPartStream = newPart.GetStream(FileMode.Create, FileAccess.ReadWrite))
                             FileUtils.CopyStream(oldPartStream, newPartStream);
 
                         var newRid = "R" + Guid.NewGuid().ToString().Replace("-", "");
@@ -4811,15 +4842,19 @@ namespace OpenXmlPowerTools
 
                         if (newPart.ContentType.EndsWith("xml"))
                         {
-                            XDocument newPartXDoc = null;
-                            using (var stream = newPart.GetStream())
-                            {
-                                newPartXDoc = XDocument.Load(stream);
-                                MoveRelatedPartsToDestination(relatedPackagePart, newPart, newPartXDoc.Root);
-                            }
-                            using (var stream = newPart.GetStream())
+                            // Read the content we just copied from the source part into a buffer,
+                            // process it, then write back. Using a MemoryStream buffer avoids
+                            // stream re-open issues with IPackagePart on .NET Framework.
+                            XDocument newPartXDoc;
+                            using (var srcStream = relatedPackagePart.GetStream(FileMode.Open, FileAccess.Read))
+                                newPartXDoc = XDocument.Load(srcStream);
+                            MoveRelatedPartsToDestination(relatedPackagePart, newPart, newPartXDoc.Root);
+                            using (var stream = newPart.GetStream(FileMode.Create, FileAccess.ReadWrite))
                                 newPartXDoc.Save(stream);
                         }
+                        // Flush the package to ensure relationship changes are committed
+                        // (required on .NET Framework where System.IO.Packaging buffers writes)
+                        partInNewDocument.Package.Flush();
                     }
                 }
             }

@@ -97,15 +97,15 @@ namespace OpenXmlPowerTools
             XDocument partXDocument = part.GetXDocument();
             if (partXDocument != null)
             {
-#if true
+                // When inside a PowerTools block, defer writing to the stream so that the
+                // SDK's cached root element is not invalidated. The stream will be flushed
+                // when EndPowerToolsBlock is called.
+                if (part.OpenXmlPackage != null && part.OpenXmlPackage.IsInPowerToolsBlock())
+                    return;
+
                 using (Stream partStream = part.GetStream(FileMode.Create, FileAccess.Write))
                 using (XmlWriter partXmlWriter = XmlWriter.Create(partStream))
                     partXDocument.Save(partXmlWriter);
-#else
-                byte[] array = Encoding.UTF8.GetBytes(partXDocument.ToString(SaveOptions.DisableFormatting));
-                using (MemoryStream ms = new MemoryStream(array))
-                    part.FeedData(ms);
-#endif
             }
         }
 

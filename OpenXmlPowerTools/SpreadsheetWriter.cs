@@ -380,9 +380,9 @@ namespace OpenXmlPowerTools
                             xw.WriteEndAttribute();
                             break;
                         case CellDataType.Date:
-                            xw.WriteStartAttribute("t");
-                            xw.WriteValue("d");
-                            xw.WriteEndAttribute();
+                            // Dates are stored as OA serial numbers with a date number format applied.
+                            // Writing t="d" with an ISO string value causes validation errors in SDK 3.x.
+                            // No "t" attribute is needed; the number format style distinguishes date cells.
                             break;
                         case CellDataType.Number:
                             xw.WriteStartAttribute("t");
@@ -403,7 +403,10 @@ namespace OpenXmlPowerTools
                     if (cell.Value != null)
                     {
                         xw.WriteStartElement("v", ns);
-                        xw.WriteValue(cell.Value);
+                        if (cell.CellDataType == CellDataType.Date && cell.Value is DateTime dateValue)
+                            xw.WriteValue(dateValue.ToOADate());
+                        else
+                            xw.WriteValue(cell.Value);
                         xw.WriteEndElement();
                     }
                     xw.WriteEndElement();
