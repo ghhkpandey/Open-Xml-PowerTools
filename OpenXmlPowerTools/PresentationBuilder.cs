@@ -138,7 +138,7 @@ namespace OpenXmlPowerTools
             mainPart.Declaration.Encoding = "UTF-8";
             output.PresentationPart.PutXDocument();
 
-            using (OpenXmlMemoryStreamDocument streamDoc = new OpenXmlMemoryStreamDocument(sources[0].PmlDocument))
+            using (OpenXmlMemoryStreamDocument streamDoc = new OpenXmlMemoryStreamDocument(sources[0].PmlDocument, true))
             using (PresentationDocument doc = streamDoc.GetPresentationDocument())
             {
                 CopyStartingParts(doc, output);
@@ -148,7 +148,7 @@ namespace OpenXmlPowerTools
             SlideMasterPart currentMasterPart = null;
             foreach (SlideSource source in sources)
             {
-                using (OpenXmlMemoryStreamDocument streamDoc = new OpenXmlMemoryStreamDocument(source.PmlDocument))
+                using (OpenXmlMemoryStreamDocument streamDoc = new OpenXmlMemoryStreamDocument(source.PmlDocument, true))
                 using (PresentationDocument doc = streamDoc.GetPresentationDocument())
                 {
                     try

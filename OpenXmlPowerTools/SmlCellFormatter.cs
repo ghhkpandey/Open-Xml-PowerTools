@@ -234,7 +234,7 @@ namespace OpenXmlPowerTools
             }
             if ((cfc.Contains('(') && cfc.Contains(')')) || cfc.Contains('-'))
             {
-                var s3 = (-dv).ToString(cfc, CultureInfo.InvariantCulture).Trim();
+                var s3 = Math.Abs(dv).ToString(cfc, CultureInfo.InvariantCulture).Trim();
                 return s3;
             }
             else

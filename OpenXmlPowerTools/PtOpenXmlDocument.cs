@@ -539,6 +539,23 @@ namespace OpenXmlPowerTools
             }
         }
 
+        internal OpenXmlMemoryStreamDocument(OpenXmlPowerToolsDocument doc, bool readOnly)
+        {
+            Document = doc;
+            DocMemoryStream = new MemoryStream();
+            DocMemoryStream.Write(doc.DocumentByteArray, 0, doc.DocumentByteArray.Length);
+            try
+            {
+                DocPackage = readOnly
+                    ? Package.Open(DocMemoryStream, FileMode.Open, FileAccess.Read)
+                    : Package.Open(DocMemoryStream, FileMode.Open);
+            }
+            catch (Exception e)
+            {
+                throw new PowerToolsDocumentException(e.Message);
+            }
+        }
+
         internal OpenXmlMemoryStreamDocument(MemoryStream stream)
         {
             DocMemoryStream = stream;

@@ -1906,9 +1906,10 @@ listSeparator
         {
             ContentType = part.ContentType;
             using (Stream s = part.GetStream(FileMode.Open, FileAccess.Read))
+            using (var ms = new MemoryStream())
             {
-                Media = new byte[s.Length];
-                s.Read(Media, 0, (int)s.Length);
+                s.CopyTo(ms);
+                Media = ms.ToArray();
             }
         }
 
