@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.5.11723.231
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UnitTests", "UnitTests", "{F4A0E6E0-1234-4B56-89AB-CDEF01234567}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{F4A0E6E0-1234-4B56-89AB-CDEF01234567}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ChartUpdater01", "OpenXmlPowerToolsExamples\ChartUpdater01\ChartUpdater01.csproj", "{1B03D24F-FB08-42E1-BB25-2D1BB907991B}"
 EndProject
