@@ -21,7 +21,7 @@ namespace ExampleDocumentBuilder04
             var tempDi = new DirectoryInfo(string.Format("ExampleOutput-{0:00}-{1:00}-{2:00}-{3:00}{4:00}{5:00}", n.Year - 2000, n.Month, n.Day, n.Hour, n.Minute, n.Second));
             tempDi.Create();
 
-            WmlDocument solarSystemDoc = new WmlDocument("../../solar-system.docx");
+            WmlDocument solarSystemDoc = new WmlDocument("solar-system.docx");
             using (OpenXmlMemoryStreamDocument streamDoc = new OpenXmlMemoryStreamDocument(solarSystemDoc))
             using (WordprocessingDocument solarSystem = streamDoc.GetWordprocessingDocument())
             {
@@ -66,7 +66,7 @@ namespace ExampleDocumentBuilder04
                 // validate existence of files referenced in content controls
                 foreach (var f in q3.Where(g => g.Key != ".NonContentControl"))
                 {
-                    string filename = "../../" + f.Key + ".docx";
+                    string filename = f.Key + ".docx";
                     FileInfo fi = new FileInfo(filename);
                     if (!fi.Exists)
                     {
@@ -81,7 +81,7 @@ namespace ExampleDocumentBuilder04
                     {
                         Group = g,
                         Document = g.Key != ".NonContentControl" ?
-                            new WmlDocument("../../" + g.Key + ".docx") :
+                            new WmlDocument( g.Key + ".docx") :
                             solarSystemDoc
                     });
 

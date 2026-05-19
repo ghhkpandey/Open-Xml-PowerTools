@@ -30,6 +30,13 @@ namespace OpenXmlPowerTools
         public bool DiscardHeadersAndFootersInKeptSections { get; set; }
         public string InsertId { get; set; }
 
+        /// <summary>
+        /// When true and the PtOpenXml.Insert marker is inside a header or footer part of the
+        /// output document, content is sourced from the matching header or footer parts of this
+        /// source document instead of from the body. KeepSections is ignored in this mode.
+        /// </summary>
+        public bool KeepHeaderOrFooterOnly { get; set; }
+
         public Source(string fileName)
         {
             WmlDocument = new WmlDocument(fileName);
@@ -81,6 +88,15 @@ namespace OpenXmlPowerTools
             Start = 0;
             Count = Int32.MaxValue;
             KeepSections = false;
+            InsertId = insertId;
+        }
+
+        public Source(WmlDocument source, string insertId, bool keepSections)
+        {
+            WmlDocument = source;
+            Start = 0;
+            Count = Int32.MaxValue;
+            KeepSections = keepSections;
             InsertId = insertId;
         }
 
@@ -570,13 +586,47 @@ namespace OpenXmlPowerTools
                                         var partXDoc = part.GetXDocument();
                                         if (!partXDoc.Descendants(PtOpenXml.Insert).Any(d => (string)d.Attribute(PtOpenXml.Id) == source.InsertId))
                                             continue;
-                                        List<XElement> contents = doc.MainDocumentPart.GetXDocument()
-                                            .Root
-                                            .Element(W.body)
-                                            .Elements()
-                                            .Skip(source.Start)
-                                            .Take(source.Count)
-                                            .ToList();
+
+                                        List<XElement> contents;
+                                        if (source.KeepHeaderOrFooterOnly)
+                                        {
+                                            // Pull content from the matching source header or footer parts
+                                            // instead of from the source body.
+                                            // Relationships are owned by each source header/footer part, not
+                                            // MainDocumentPart, so we iterate per source part and copy
+                                            // relationships from the correct owner before aggregating content.
+                                            IEnumerable<OpenXmlPart> sourceParts = (part is HeaderPart)
+                                                ? doc.MainDocumentPart.HeaderParts.Cast<OpenXmlPart>()
+                                                : doc.MainDocumentPart.FooterParts.Cast<OpenXmlPart>();
+
+                                            contents = new List<XElement>();
+                                            foreach (var srcPart in sourceParts)
+                                            {
+                                                // Deep-copy elements so that CopyRelatedPartsForContentParts /
+                                                // AddRelationships mutations (r:embed rewrites) do not corrupt
+                                                // the cached XDocument of srcPart for subsequent passes.
+                                                var srcElements = srcPart.GetXDocument().Root.Elements()
+                                                    .Select(e => new XElement(e)).ToList();
+                                                FixRanges(srcPart.GetXDocument(), srcElements);
+                                                AddRelationships(srcPart, part, srcElements);
+                                                CopyRelatedPartsForContentParts(srcPart, part, srcElements, images);
+                                                contents.AddRange(srcElements);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            // Source content comes from the body; relationships are owned by MainDocumentPart.
+                                            contents = doc.MainDocumentPart.GetXDocument()
+                                                .Root
+                                                .Element(W.body)
+                                                .Elements()
+                                                .Skip(source.Start)
+                                                .Take(source.Count)
+                                                .ToList();
+                                            FixRanges(doc.MainDocumentPart.GetXDocument(), contents);
+                                            AddRelationships(doc.MainDocumentPart, part, contents);
+                                            CopyRelatedPartsForContentParts(doc.MainDocumentPart, part, contents, images);
+                                        }
 
                                         try
                                         {
@@ -706,6 +756,7 @@ namespace OpenXmlPowerTools
                     var newSrc = new Source(newWmlDocument, src.Start, src.Count, src.KeepSections);
                     newSrc.DiscardHeadersAndFootersInKeptSections = src.DiscardHeadersAndFootersInKeptSections;
                     newSrc.InsertId = src.InsertId;
+                    newSrc.KeepHeaderOrFooterOnly = src.KeepHeaderOrFooterOnly;
                     return newSrc;
                 }
             }
@@ -2138,6 +2189,7 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
             RemoveGfxdata(newContent);
             CopyCustomXmlPartsForDataBoundContentControls(sourceDocument, newDocument, newContent);
             CopyWebExtensions(sourceDocument, newDocument);
+            AdjustDrawingPositionsForMarginDelta(sourceDocument, newDocument, newContent);
             if (insertId != null)
             {
                 XElement insertElementToReplace = newMainXDoc
@@ -2201,8 +2253,12 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
             }
         }
 
-        /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        /// New method to support new functionality
+        // ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // New method to support new functionality
+        // Caller is responsible for invoking FixRanges, AddRelationships and CopyRelatedPartsForContentParts
+        // against the correct source part BEFORE calling this method, because the source part that owns
+        // the relationship IDs in newContent varies by scenario (MainDocumentPart for body content,
+        // individual header/footer parts for KeepHeaderOrFooterOnly content).
         private static void AppendDocument(WordprocessingDocument sourceDocument, WordprocessingDocument newDocument, OpenXmlPart part,
             List<XElement> newContent, bool keepSection, string insertId, List<ImageData> images)
         {
@@ -2211,20 +2267,19 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
             partXDoc.Declaration.Standalone = Yes;
             partXDoc.Declaration.Encoding = Utf8;
 
-            FixRanges(part.GetXDocument(), newContent);
-            AddRelationships(sourceDocument.MainDocumentPart, part, newContent);
-            CopyRelatedPartsForContentParts(sourceDocument.MainDocumentPart, part,
-                newContent, images);
-
             // never keep sections for content to be inserted into a header/footer
             List<XElement> adjustedContents = newContent.Where(e => e.Name != W.sectPr).ToList();
             adjustedContents.DescendantsAndSelf(W.sectPr).Remove();
             newContent = adjustedContents;
 
+
+
+            CopyStylesAndFonts(sourceDocument, newDocument, newContent);
             CopyNumbering(sourceDocument, newDocument, newContent, images);
             CopyComments(sourceDocument, newDocument, newContent, images);
             AdjustUniqueIds(sourceDocument, newDocument, newContent);
             RemoveGfxdata(newContent);
+            AdjustDrawingPositionsForMarginDelta(sourceDocument, newDocument, newContent);
 
             if (insertId == null)
                 throw new OpenXmlPowerToolsException("Internal error");
@@ -2235,6 +2290,104 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
             if (insertElementToReplace != null)
                 insertElementToReplace.AddAnnotation(new ReplaceSemaphore());
             partXDoc.Elements().First().ReplaceWith((XElement)InsertTransform(partXDoc.Root, newContent));
+        }
+
+        // Conversion factor: 1 inch = 914400 EMU, 1 inch = 1440 twips → 1 twip = 635 EMU
+        private const long EmuPerTwip = 635;
+
+        /// <summary>
+        /// Adjusts <c>wp:positionH</c> and <c>wp:positionV</c> offsets of anchored drawings so
+        /// that content sourced from a document with different page margins renders in the same
+        /// visual position in the destination document.
+        ///
+        /// Anchors that use <c>relativeFrom="column"</c> are horizontally relative to the text
+        /// column.  When the left margin differs the column edge moves, so the offset must be
+        /// compensated by (srcLeft − destLeft) to cancel the shift.
+        ///
+        /// Anchors that use <c>relativeFrom="margin"</c> are relative to the page margin edge,
+        /// which also moves with left/right margin changes, so the same compensation applies.
+        ///
+        /// Anchors relative to <c>page</c> or <c>leftMargin</c>/<c>rightMargin</c>/<c>insideMargin</c>/
+        /// <c>outsideMargin</c>/<c>paragraph</c>/<c>character</c>/<c>line</c> are already in an
+        /// absolute or locally-relative frame and are left untouched.
+        /// </summary>
+        private static void AdjustDrawingPositionsForMarginDelta(
+            WordprocessingDocument sourceDocument,
+            WordprocessingDocument newDocument,
+            IEnumerable<XElement> content)
+        {
+            // Read pgMar from the source and destination main documents.
+            XElement srcPgMar = sourceDocument.MainDocumentPart
+                .GetXDocument().Descendants(W.pgMar).FirstOrDefault();
+            XElement destPgMar = newDocument.MainDocumentPart
+                .GetXDocument().Descendants(W.pgMar).FirstOrDefault();
+
+            if (srcPgMar == null || destPgMar == null)
+                return;
+
+            long srcLeft = GetTwipAttribute(srcPgMar, W.left);
+            long destLeft = GetTwipAttribute(destPgMar, W.left);
+            long srcRight = GetTwipAttribute(srcPgMar, W.right);
+            long destRight = GetTwipAttribute(destPgMar, W.right);
+            long srcTop = GetTwipAttribute(srcPgMar, W.top);
+            long destTop = GetTwipAttribute(destPgMar, W.top);
+            long srcBottom = GetTwipAttribute(srcPgMar, W.bottom);
+            long destBottom = GetTwipAttribute(destPgMar, W.bottom);
+
+            // Delta to apply: positive means the destination column starts further right —
+            // we subtract from the stored offset so the shape stays at the same visual x.
+            long hDeltaEmu = (srcLeft - destLeft) * EmuPerTwip;
+            long vDeltaEmu = (srcTop - destTop) * EmuPerTwip;
+
+            if (hDeltaEmu == 0 && vDeltaEmu == 0)
+                return;
+
+            foreach (XElement anchor in content
+                .SelectMany(e => e.DescendantsAndSelf(WP.anchor))
+                .ToList())
+            {
+                // If the anchor is locked by the author (locked="1") it should not be
+                // moved by programmatic margin compensation.  Respect the lock and skip
+                // adjustment for such anchors.
+                string anchorLocked = (string)anchor.Attribute("locked");
+                if (anchorLocked == "1")
+                    continue;
+                if (hDeltaEmu != 0)
+                {
+                    XElement posH = anchor.Element(WP.positionH);
+                    if (posH != null)
+                    {
+                        string relFrom = (string)posH.Attribute("relativeFrom");
+                        if (relFrom == "column" || relFrom == "margin")
+                        {
+                            XElement posOffset = posH.Element(WP.posOffset);
+                            if (posOffset != null && long.TryParse(posOffset.Value, out long current))
+                                posOffset.Value = (current + hDeltaEmu).ToString();
+                        }
+                    }
+                }
+
+                if (vDeltaEmu != 0)
+                {
+                    XElement posV = anchor.Element(WP.positionV);
+                    if (posV != null)
+                    {
+                        string relFrom = (string)posV.Attribute("relativeFrom");
+                        if (relFrom == "margin")
+                        {
+                            XElement posOffset = posV.Element(WP.posOffset);
+                            if (posOffset != null && long.TryParse(posOffset.Value, out long current))
+                                posOffset.Value = (current + vDeltaEmu).ToString();
+                        }
+                    }
+                }
+            }
+        }
+
+        private static long GetTwipAttribute(XElement element, XName attributeName)
+        {
+            string val = (string)element.Attribute(attributeName);
+            return val != null && long.TryParse(val, out long result) ? result : 0L;
         }
         /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

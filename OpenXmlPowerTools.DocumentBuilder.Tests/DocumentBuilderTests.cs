@@ -935,6 +935,344 @@ namespace OxPt
                         Assert.True(docPrIds.Add(item.Attribute(NoNamespace.id).Value));
             }
         }
+
+        // ---------------------------------------------------------------
+        // Helper: build an in-memory dest document whose default header
+        // (or footer) contains a PtOpenXml.Insert placeholder.
+        // ---------------------------------------------------------------
+        private static WmlDocument BuildDestDocWithInsertInHeader(string insertId)
+        {
+            XNamespace w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+            XNamespace r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+            XNamespace ptDb = "http://powertools.codeplex.com/documentbuilder/2011/insert";
+
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (WordprocessingDocument wDoc =
+                    WordprocessingDocument.Create(ms, DocumentFormat.OpenXml.WordprocessingDocumentType.Document))
+                {
+                    MainDocumentPart mdp = wDoc.AddMainDocumentPart();
+
+                    // Add a header part whose single paragraph is the PtOpenXml.Insert marker
+                    HeaderPart hdrPart = mdp.AddNewPart<HeaderPart>();
+                    string hdrRid = mdp.GetIdOfPart(hdrPart);
+                    XDocument hdrXDoc = XDocument.Parse(
+                        $@"<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+                        <w:hdr xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+                               xmlns:pt14='http://powertools.codeplex.com/documentbuilder/2011/insert'>
+                          <pt14:Insert Id='{insertId}'/>
+                        </w:hdr>");
+                    hdrPart.PutXDocument(hdrXDoc);
+
+                    // Main body with one paragraph and a sectPr that references the header
+                    XDocument bodyXDoc = XDocument.Parse(
+                        $@"<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+                        <w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+                                    xmlns:r='http://schemas.openxmlformats.org/officeDocument/2006/relationships'>
+                          <w:body>
+                            <w:p><w:r><w:t>Dest body paragraph.</w:t></w:r></w:p>
+                            <w:sectPr>
+                              <w:headerReference w:type='default' r:id='{hdrRid}'/>
+                            </w:sectPr>
+                          </w:body>
+                        </w:document>");
+                    mdp.PutXDocument(bodyXDoc);
+                }
+                return new WmlDocument("Dest.docx", ms.ToArray());
+            }
+        }
+
+        private static WmlDocument BuildDestDocWithInsertInFooter(string insertId)
+        {
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (WordprocessingDocument wDoc =
+                    WordprocessingDocument.Create(ms, DocumentFormat.OpenXml.WordprocessingDocumentType.Document))
+                {
+                    MainDocumentPart mdp = wDoc.AddMainDocumentPart();
+
+                    FooterPart ftrPart = mdp.AddNewPart<FooterPart>();
+                    string ftrRid = mdp.GetIdOfPart(ftrPart);
+                    XDocument ftrXDoc = XDocument.Parse(
+                        $@"<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+                        <w:ftr xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+                               xmlns:pt14='http://powertools.codeplex.com/documentbuilder/2011/insert'>
+                          <pt14:Insert Id='{insertId}'/>
+                        </w:ftr>");
+                    ftrPart.PutXDocument(ftrXDoc);
+
+                    XDocument bodyXDoc = XDocument.Parse(
+                        $@"<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+                        <w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+                                    xmlns:r='http://schemas.openxmlformats.org/officeDocument/2006/relationships'>
+                          <w:body>
+                            <w:p><w:r><w:t>Dest body paragraph.</w:t></w:r></w:p>
+                            <w:sectPr>
+                              <w:footerReference w:type='default' r:id='{ftrRid}'/>
+                            </w:sectPr>
+                          </w:body>
+                        </w:document>");
+                    mdp.PutXDocument(bodyXDoc);
+                }
+                return new WmlDocument("Dest.docx", ms.ToArray());
+            }
+        }
+
+        // Helper: build a src document that has a real header part with identifiable text
+        private static WmlDocument BuildSrcDocWithHeader(string headerText)
+        {
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (WordprocessingDocument wDoc =
+                    WordprocessingDocument.Create(ms, DocumentFormat.OpenXml.WordprocessingDocumentType.Document))
+                {
+                    MainDocumentPart mdp = wDoc.AddMainDocumentPart();
+
+                    HeaderPart hdrPart = mdp.AddNewPart<HeaderPart>();
+                    string hdrRid = mdp.GetIdOfPart(hdrPart);
+                    XDocument hdrXDoc = XDocument.Parse(
+                        $@"<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+                        <w:hdr xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'>
+                          <w:p><w:r><w:t>{headerText}</w:t></w:r></w:p>
+                        </w:hdr>");
+                    hdrPart.PutXDocument(hdrXDoc);
+
+                    XDocument bodyXDoc = XDocument.Parse(
+                        $@"<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+                        <w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+                                    xmlns:r='http://schemas.openxmlformats.org/officeDocument/2006/relationships'>
+                          <w:body>
+                            <w:p><w:r><w:t>Src body paragraph.</w:t></w:r></w:p>
+                            <w:sectPr>
+                              <w:headerReference w:type='default' r:id='{hdrRid}'/>
+                            </w:sectPr>
+                          </w:body>
+                        </w:document>");
+                    mdp.PutXDocument(bodyXDoc);
+                }
+                return new WmlDocument("Src.docx", ms.ToArray());
+            }
+        }
+
+        // Helper: build a src document that has a real footer part with identifiable text
+        private static WmlDocument BuildSrcDocWithFooter(string footerText)
+        {
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (WordprocessingDocument wDoc =
+                    WordprocessingDocument.Create(ms, DocumentFormat.OpenXml.WordprocessingDocumentType.Document))
+                {
+                    MainDocumentPart mdp = wDoc.AddMainDocumentPart();
+
+                    FooterPart ftrPart = mdp.AddNewPart<FooterPart>();
+                    string ftrRid = mdp.GetIdOfPart(ftrPart);
+                    XDocument ftrXDoc = XDocument.Parse(
+                        $@"<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+                        <w:ftr xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'>
+                          <w:p><w:r><w:t>{footerText}</w:t></w:r></w:p>
+                        </w:ftr>");
+                    ftrPart.PutXDocument(ftrXDoc);
+
+                    XDocument bodyXDoc = XDocument.Parse(
+                        $@"<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+                        <w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+                                    xmlns:r='http://schemas.openxmlformats.org/officeDocument/2006/relationships'>
+                          <w:body>
+                            <w:p><w:r><w:t>Src body paragraph.</w:t></w:r></w:p>
+                            <w:sectPr>
+                              <w:footerReference w:type='default' r:id='{ftrRid}'/>
+                            </w:sectPr>
+                          </w:body>
+                        </w:document>");
+                    mdp.PutXDocument(bodyXDoc);
+                }
+                return new WmlDocument("Src.docx", ms.ToArray());
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // DB017 – KeepHeaderOrFooterOnly: header content is sourced from
+        // the header parts of the source document, not its body.
+        // ---------------------------------------------------------------
+        [Fact]
+        public void DB017_KeepHeaderOrFooterOnly_InjectsHeaderContent()
+        {
+            const string insertId = "MyHeader";
+            const string expectedText = "HEADER_SENTINEL_TEXT";
+
+            WmlDocument destDoc = BuildDestDocWithInsertInHeader(insertId);
+            WmlDocument srcDoc = BuildSrcDocWithHeader(expectedText);
+
+            var sources = new List<Source>
+            {
+                new Source(destDoc),
+                new Source(srcDoc, insertId) { KeepHeaderOrFooterOnly = true },
+            };
+
+            WmlDocument result = DocumentBuilder.BuildDocument(sources);
+
+            using (MemoryStream ms = new MemoryStream())
+            {
+                ms.Write(result.DocumentByteArray, 0, result.DocumentByteArray.Length);
+                using (WordprocessingDocument wDoc = WordprocessingDocument.Open(ms, false))
+                {
+                    // The header part of the output must contain the sentinel text from the src header
+                    var allHeaderText = wDoc.MainDocumentPart.HeaderParts
+                        .SelectMany(hp => hp.GetXDocument().Descendants(W.t))
+                        .Select(t => t.Value)
+                        .ToList();
+                    Assert.Contains(expectedText, allHeaderText);
+
+                    // The body must NOT contain the sentinel text (it came from the src header, not body)
+                    var bodyText = wDoc.MainDocumentPart.GetXDocument()
+                        .Descendants(W.t)
+                        .Select(t => t.Value)
+                        .ToList();
+                    Assert.DoesNotContain(expectedText, bodyText);
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // DB018 – KeepHeaderOrFooterOnly: footer content is sourced from
+        // the footer parts of the source document, not its body.
+        // ---------------------------------------------------------------
+        [Fact]
+        public void DB018_KeepHeaderOrFooterOnly_InjectsFooterContent()
+        {
+            const string insertId = "MyFooter";
+            const string expectedText = "FOOTER_SENTINEL_TEXT";
+
+            WmlDocument destDoc = BuildDestDocWithInsertInFooter(insertId);
+            WmlDocument srcDoc = BuildSrcDocWithFooter(expectedText);
+
+            var sources = new List<Source>
+            {
+                new Source(destDoc),
+                new Source(srcDoc, insertId) { KeepHeaderOrFooterOnly = true },
+            };
+
+            WmlDocument result = DocumentBuilder.BuildDocument(sources);
+
+            using (MemoryStream ms = new MemoryStream())
+            {
+                ms.Write(result.DocumentByteArray, 0, result.DocumentByteArray.Length);
+                using (WordprocessingDocument wDoc = WordprocessingDocument.Open(ms, false))
+                {
+                    var allFooterText = wDoc.MainDocumentPart.FooterParts
+                        .SelectMany(fp => fp.GetXDocument().Descendants(W.t))
+                        .Select(t => t.Value)
+                        .ToList();
+                    Assert.Contains(expectedText, allFooterText);
+
+                    var bodyText = wDoc.MainDocumentPart.GetXDocument()
+                        .Descendants(W.t)
+                        .Select(t => t.Value)
+                        .ToList();
+                    Assert.DoesNotContain(expectedText, bodyText);
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // DB019 – Without KeepHeaderOrFooterOnly the existing behaviour
+        // is preserved: body content of the source is injected into the
+        // header placeholder (regression guard).
+        // ---------------------------------------------------------------
+        [Fact]
+        public void DB019_WithoutKeepHeaderOrFooterOnly_InjectsBodyContentIntoHeader()
+        {
+            const string insertId = "BodyIntoHeader";
+            const string bodyText = "BODY_SENTINEL_TEXT";
+
+            WmlDocument destDoc = BuildDestDocWithInsertInHeader(insertId);
+
+            // Src has no header parts; its body contains the sentinel
+            WmlDocument srcDoc;
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (WordprocessingDocument wDoc =
+                    WordprocessingDocument.Create(ms, DocumentFormat.OpenXml.WordprocessingDocumentType.Document))
+                {
+                    MainDocumentPart mdp = wDoc.AddMainDocumentPart();
+                    mdp.PutXDocument(XDocument.Parse(
+                        $@"<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+                        <w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'>
+                          <w:body>
+                            <w:p><w:r><w:t>{bodyText}</w:t></w:r></w:p>
+                          </w:body>
+                        </w:document>"));
+                }
+                srcDoc = new WmlDocument("Src.docx", ms.ToArray());
+            }
+
+            var sources = new List<Source>
+            {
+                new Source(destDoc),
+                new Source(srcDoc, insertId),    // KeepHeaderOrFooterOnly NOT set
+            };
+
+            WmlDocument result = DocumentBuilder.BuildDocument(sources);
+
+            using (MemoryStream ms = new MemoryStream())
+            {
+                ms.Write(result.DocumentByteArray, 0, result.DocumentByteArray.Length);
+                using (WordprocessingDocument wDoc = WordprocessingDocument.Open(ms, false))
+                {
+                    // The sentinel text must appear in a header part (injected from body into header placeholder)
+                    var allHeaderText = wDoc.MainDocumentPart.HeaderParts
+                        .SelectMany(hp => hp.GetXDocument().Descendants(W.t))
+                        .Select(t => t.Value)
+                        .ToList();
+                    Assert.Contains(bodyText, allHeaderText);
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // DB020 – KeepHeaderOrFooterOnly: even when KeepSections=true is
+        // set on the dest source (so sections are preserved), no w:sectPr
+        // must appear inside the injected header content, and the sentinel
+        // text must still arrive from the src header part.
+        // ---------------------------------------------------------------
+        [Fact]
+        public void DB020_KeepHeaderOrFooterOnly_NoSectPrInInjectedHeader()
+        {
+            const string insertId = "HdrIgnoreSect";
+            const string expectedText = "HEADER_NO_SECTION_TEXT";
+
+            // Use KeepSections=true on the dest doc so sections are preserved
+            // in the output BEFORE the second (header/footer insert) loop runs.
+            WmlDocument destDoc = BuildDestDocWithInsertInHeader(insertId);
+            WmlDocument srcDoc = BuildSrcDocWithHeader(expectedText);
+
+            var sources = new List<Source>
+            {
+                new Source(destDoc) { KeepSections = true },   // sections preserved → header ref in output
+                new Source(srcDoc, insertId) { KeepHeaderOrFooterOnly = true },
+            };
+
+            WmlDocument result = DocumentBuilder.BuildDocument(sources);
+
+            using (MemoryStream ms = new MemoryStream())
+            {
+                ms.Write(result.DocumentByteArray, 0, result.DocumentByteArray.Length);
+                using (WordprocessingDocument wDoc = WordprocessingDocument.Open(ms, false))
+                {
+                    var allHeaderText = wDoc.MainDocumentPart.HeaderParts
+                        .SelectMany(hp => hp.GetXDocument().Descendants(W.t))
+                        .Select(t => t.Value)
+                        .ToList();
+                    Assert.Contains(expectedText, allHeaderText);
+
+                    // No w:sectPr must appear inside any header part
+                    var sectPrInHeaders = wDoc.MainDocumentPart.HeaderParts
+                        .SelectMany(hp => hp.GetXDocument().Descendants(W.sectPr))
+                        .ToList();
+                    Assert.Empty(sectPrInHeaders);
+                }
+            }
+        }
     }
 }
 #endif
