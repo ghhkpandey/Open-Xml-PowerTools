@@ -427,7 +427,7 @@ namespace OpenXmlPowerTools
                                             if (dbie.Message.Contains("{0}"))
                                                 throw new DocumentBuilderException(string.Format(dbie.Message, sourceNum2));
                                             else
-                                                throw dbie;
+                                                throw;
                                         }
                                     }
                                 }
@@ -472,7 +472,7 @@ namespace OpenXmlPowerTools
                                 if (dbie.Message.Contains("{0}"))
                                     throw new DocumentBuilderException(string.Format(dbie.Message, sourceNum2));
                                 else
-                                    throw dbie;
+                                    throw;
                             }
                         }
                     }
@@ -637,7 +637,7 @@ namespace OpenXmlPowerTools
                                             if (dbie.Message.Contains("{0}"))
                                                 throw new DocumentBuilderException(string.Format(dbie.Message, sourceNum));
                                             else
-                                                throw dbie;
+                                                throw;
                                         }
                                     }
                                 }
@@ -2389,8 +2389,7 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
             string val = (string)element.Attribute(attributeName);
             return val != null && long.TryParse(val, out long result) ? result : 0L;
         }
-        /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+       
         public static WmlDocument ExtractGlossaryDocument(WmlDocument wmlGlossaryDocument)
         {
             if (RelationshipMarkup == null)

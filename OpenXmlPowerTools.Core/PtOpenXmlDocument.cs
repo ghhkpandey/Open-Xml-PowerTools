@@ -343,7 +343,12 @@ namespace OpenXmlPowerTools
         {
             Stream partStream = part.GetStream(FileMode.Open, FileAccess.Read);
             byte[] partContent = new byte[partStream.Length];
+
+#if NET10_0_OR_GREATER
+            partStream.ReadExactly(partContent, 0, (int)partStream.Length);
+#elif NET481_OR_GREATER
             partStream.Read(partContent, 0, (int)partStream.Length);
+#endif
 
             File.WriteAllBytes(filePath, partContent);
         }

@@ -1002,7 +1002,11 @@ namespace OpenXmlPowerTools
             using (Stream s = part.GetStream(FileMode.Open, FileAccess.Read))
             {
                 Image = new byte[s.Length];
+#if NET10_0_OR_GREATER
+                s.ReadExactly(Image, 0, (int)s.Length);
+#elif NET481_OR_GREATER
                 s.Read(Image, 0, (int)s.Length);
+#endif
             }
         }
 
